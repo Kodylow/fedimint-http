@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -5,7 +7,7 @@ use axum::{
     },
     response::IntoResponse,
 };
-use futures_util::stream::StreamExt;
+use futures_util::{stream::StreamExt, Stream};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
@@ -14,8 +16,8 @@ use crate::{error::AppError, state::AppState};
 
 use super::handlers;
 
-const JSONRPC_VERSION: &str = "2.0";
-const JSONRPC_ERROR_INVALID_REQUEST: i16 = -32600;
+pub const JSONRPC_VERSION: &str = "2.0";
+pub const JSONRPC_ERROR_INVALID_REQUEST: i16 = -32600;
 
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
@@ -32,7 +34,7 @@ pub struct JsonRpcRequest {
     pub id: u64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize)]
 pub struct JsonRpcResponse {
     pub jsonrpc: String,
     pub result: Option<Value>,
@@ -46,9 +48,9 @@ pub struct JsonRpcError {
     pub message: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
 #[serde(rename_all = "kebab-case")]
-pub enum JsonRpcMethod {
+pub enum JsonRpcSingleMethod {
     AdminInfo,
     AdminBackup,
     AdminConfig,
@@ -62,14 +64,26 @@ pub enum JsonRpcMethod {
     MintSplit,
     MintCombine,
     LnInvoice,
-    LnAwaitInvoice,
     LnPay,
-    LnAwaitPay,
     LnListGateways,
     LnSwitchGateway,
     WalletDepositAddress,
+}
+
+#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum JsonSubscriptionMethod {
+    LnAwaitInvoice,
+    LnAwaitPay,
     WalletAwaitDeposit,
     WalletWithdraw,
+}
+
+#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
+#[serde(rename_all = "kebab-case")]
+pub enum JsonRpcMethod {
+    Single(JsonRpcSingleMethod),
+    Subscription(JsonSubscriptionMethod),
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
@@ -83,11 +97,20 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
             };
-
-            let res = match_method(req.clone(), state.clone()).await;
-
-            let res_msg = create_json_rpc_response(res, req.id);
-            socket.send(res_msg).await.unwrap();
+            let state_clone = state.clone();
+            match req.method {
+                JsonRpcMethod::Single(method) => {
+                    let res = match_single_method(req.clone(), method, state_clone).await;
+                    let res_msg = create_json_rpc_response(res, req.id);
+                    socket.send(res_msg).await.unwrap();
+                }
+                JsonRpcMethod::Subscription(method) => {
+                    let res =
+                        match_subscription_method(req.clone(), method, socket, state_clone).await;
+                    let res_msg = create_json_rpc_response(res, req.id);
+                    socket.send(res_msg).await.unwrap();
+                }
+            };
         }
     }
 }
@@ -141,68 +164,101 @@ async fn send_err_invalid_req(socket: &mut WebSocket, err: serde_json::Error, te
         .unwrap();
 }
 
-async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, AppError> {
-    match req.method {
-        JsonRpcMethod::AdminInfo => {
-            handlers::fedimint::admin::info::handle_ws(req.params, state.clone()).await
+async fn match_single_method(
+    req: JsonRpcRequest,
+    method: JsonRpcSingleMethod,
+    state: AppState,
+) -> Result<Value, AppError> {
+    match method {
+        JsonRpcSingleMethod::AdminInfo => {
+            handlers::fedimint::admin::info::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::AdminBackup => {
-            handlers::fedimint::admin::backup::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::AdminBackup => {
+            handlers::fedimint::admin::backup::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::AdminConfig => {
-            handlers::fedimint::admin::config::handle_ws(state.clone()).await
+        JsonRpcSingleMethod::AdminConfig => {
+            handlers::fedimint::admin::config::handle_ws(state).await
         }
-        JsonRpcMethod::AdminDiscoverVersion => {
-            handlers::fedimint::admin::discover_version::handle_ws(state.clone()).await
+        JsonRpcSingleMethod::AdminDiscoverVersion => {
+            handlers::fedimint::admin::discover_version::handle_ws(state).await
         }
-        JsonRpcMethod::AdminModule => {
-            handlers::fedimint::admin::module::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::AdminModule => {
+            handlers::fedimint::admin::module::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::AdminRestore => {
-            handlers::fedimint::admin::restore::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::AdminRestore => {
+            handlers::fedimint::admin::restore::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::AdminListOperations => {
-            handlers::fedimint::admin::list_operations::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::AdminListOperations => {
+            handlers::fedimint::admin::list_operations::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::MintReissue => {
-            handlers::fedimint::mint::reissue::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::MintReissue => {
+            handlers::fedimint::mint::reissue::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::MintSpend => {
-            handlers::fedimint::mint::spend::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::MintSpend => {
+            handlers::fedimint::mint::spend::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::MintValidate => {
-            handlers::fedimint::mint::validate::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::MintValidate => {
+            handlers::fedimint::mint::validate::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::MintSplit => handlers::fedimint::mint::split::handle_ws(req.params).await,
-        JsonRpcMethod::MintCombine => {
+        JsonRpcSingleMethod::MintSplit => {
+            handlers::fedimint::mint::split::handle_ws(req.params).await
+        }
+        JsonRpcSingleMethod::MintCombine => {
             handlers::fedimint::mint::combine::handle_ws(req.params).await
         }
-        JsonRpcMethod::LnInvoice => {
-            handlers::fedimint::ln::invoice::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::LnInvoice => {
+            handlers::fedimint::ln::invoice::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::LnAwaitInvoice => {
-            handlers::fedimint::ln::await_invoice::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::LnPay => {
+            handlers::fedimint::ln::pay::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::LnPay => {
-            handlers::fedimint::ln::pay::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::LnListGateways => {
+            handlers::fedimint::ln::list_gateways::handle_ws(state).await
         }
-        JsonRpcMethod::LnAwaitPay => {
-            handlers::fedimint::ln::await_pay::handle_ws(req.params, state.clone()).await
+        JsonRpcSingleMethod::LnSwitchGateway => {
+            handlers::fedimint::ln::switch_gateway::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::LnListGateways => {
-            handlers::fedimint::ln::list_gateways::handle_ws(state.clone()).await
+        JsonRpcSingleMethod::WalletDepositAddress => {
+            handlers::fedimint::wallet::deposit_address::handle_ws(req.params, state).await
         }
-        JsonRpcMethod::LnSwitchGateway => {
-            handlers::fedimint::ln::switch_gateway::handle_ws(req.params, state.clone()).await
-        }
-        JsonRpcMethod::WalletDepositAddress => {
-            handlers::fedimint::wallet::deposit_address::handle_ws(req.params, state.clone()).await
-        }
-        JsonRpcMethod::WalletAwaitDeposit => {
-            handlers::fedimint::wallet::await_deposit::handle_ws(req.params, state.clone()).await
-        }
-        JsonRpcMethod::WalletWithdraw => {
-            handlers::fedimint::wallet::withdraw::handle_ws(req.params, state.clone()).await
+    }
+}
+
+async fn match_subscription_method(
+    req: JsonRpcRequest,
+    method: JsonSubscriptionMethod,
+    mut socket: WebSocket,
+    state: AppState,
+) {
+    let stream: Pin<Box<dyn Stream<Item = Result<JsonRpcResponse, AppError>> + Send + 'static>> =
+        match method {
+            JsonSubscriptionMethod::LnAwaitInvoice => {
+                handlers::fedimint::ln::await_invoice::handle_ws(req.params, state).await
+            }
+            JsonSubscriptionMethod::LnAwaitPay => {
+                handlers::fedimint::ln::await_pay::handle_ws(req.params, state).await
+            }
+            JsonSubscriptionMethod::WalletAwaitDeposit => {
+                handlers::fedimint::wallet::await_deposit::handle_ws(req.params, state).await
+            }
+            JsonSubscriptionMethod::WalletWithdraw => {
+                handlers::fedimint::wallet::withdraw::handle_ws(req.params, state).await
+            }
+        };
+
+    // Forward all messages from the stream to the WebSocket
+    while let Some(result) = stream.next().await {
+        let message = serde_json::to_string(&result).map_err(|err| {
+            "Internal Error - Failed to serialize JSON-RPC response: ".to_string()
+                + &err.to_string()
+        })?;
+        match result {
+            Ok(message) => {
+                socket.send(message).await.unwrap();
+            }
+            Err(e) => {
+                // Handle error, e.g. by logging it and/or closing the socket
+            }
         }
     }
 }
