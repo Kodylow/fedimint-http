@@ -105,10 +105,7 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                     socket.send(res_msg).await.unwrap();
                 }
                 JsonRpcMethod::Subscription(method) => {
-                    let res =
-                        match_subscription_method(req.clone(), method, socket, state_clone).await;
-                    let res_msg = create_json_rpc_response(res, req.id);
-                    socket.send(res_msg).await.unwrap();
+                    match_subscription_method(req.clone(), method, &socket, state_clone).await;
                 }
             };
         }
@@ -227,7 +224,7 @@ async fn match_single_method(
 async fn match_subscription_method(
     req: JsonRpcRequest,
     method: JsonSubscriptionMethod,
-    mut socket: WebSocket,
+    mut socket: &WebSocket,
     state: AppState,
 ) {
     let stream: Pin<Box<dyn Stream<Item = Result<JsonRpcResponse, AppError>> + Send + 'static>> =
@@ -248,17 +245,7 @@ async fn match_subscription_method(
 
     // Forward all messages from the stream to the WebSocket
     while let Some(result) = stream.next().await {
-        let message = serde_json::to_string(&result).map_err(|err| {
-            "Internal Error - Failed to serialize JSON-RPC response: ".to_string()
-                + &err.to_string()
-        })?;
-        match result {
-            Ok(message) => {
-                socket.send(message).await.unwrap();
-            }
-            Err(e) => {
-                // Handle error, e.g. by logging it and/or closing the socket
-            }
-        }
+        let response = create_json_rpc_response(result, req.id);
+        socket.send(response).await.unwrap();
     }
 }
