@@ -1,7 +1,8 @@
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade, Sender};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use futures_util::stream::StreamExt;
+use futures_util::SinkExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
@@ -71,9 +72,10 @@ pub enum JsonRpcMethod {
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    while let Some(Ok(msg)) = socket.next().await {
+    let (mut sender, mut receiver) = socket.split();
+
+    while let Some(Ok(msg)) = receiver.next().await {
         if let Message::Text(text) = msg {
-            info!("Received: {}", text);
             let req = match serde_json::from_str::<JsonRpcRequest>(&text) {
                 Ok(request) => request,
                 Err(err) => {
@@ -82,10 +84,40 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                 }
             };
 
-            let res = match_method(req.clone(), state.clone()).await;
+            // Check if the request is for a method that requires WebSocket streaming
+            let needs_ws_sender = matches!(req.method, JsonRpcMethod::WalletAwaitDeposit /* add other methods like await_invoice as needed */);
 
-            let res_msg = create_json_rpc_response(res, req.id);
-            socket.send(res_msg).await.unwrap();
+            let res = if needs_ws_sender {
+                // Pass the WebSocket sender to the method and await its result
+                match_method(req.clone(), state.clone(), Some(sender)).await
+            } else {
+                // For methods that do not require WebSocket streaming, pass None and process the result to create a JSON-RPC response if necessary
+                match_method(req.clone(), state.clone(), None).await
+            };
+
+            match res {
+                Ok(Some(value)) => {
+                    // If the method returns a value, create a JSON-RPC response and send it
+                    let res_msg = create_json_rpc_response(value, req.id);
+                    if let Err(send_error) = sender.send(Message::Text(res_msg)).await {
+                        // Handling the error of sending the message 
+                        eprintln!("Failed to send WebSocket message: {:?}", send_error);
+                        break;
+                    }
+                },
+                Ok(None) => {
+                    // The method handled the response directly (like in case of await_invoice )
+                },
+                Err(error) => {
+                    // Handle the error from match_method. This might involve logging the error or sending an error message back through the WebSocket
+                    let error_msg = format!("Error processing request: {:?}", error);
+                    // Optionally, send an error response back through the WebSocket
+                    if let Err(send_error) = sender.send(Message::Text(error_msg)).await {
+                        eprintln!("Failed to send WebSocket error message: {:?}", send_error);
+                        break;
+                    }
+                }
+            }
         }
     }
 }
@@ -139,7 +171,7 @@ async fn send_err_invalid_req(socket: &mut WebSocket, err: serde_json::Error, te
         .unwrap();
 }
 
-async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, AppError> {
+async fn match_method(req: JsonRpcRequest, state: AppState,ws_sender: Sender) -> Result<Value, AppError> {
     match req.method {
         JsonRpcMethod::AdminBackup => {
             handlers::fedimint::admin::backup::handle_ws(state.clone(), req.params).await
@@ -203,7 +235,7 @@ async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, App
             handlers::fedimint::wallet::deposit_address::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::WalletAwaitDeposit => {
-            handlers::fedimint::wallet::await_deposit::handle_ws(state.clone(), req.params).await
+            handlers::fedimint::wallet::await_deposit::handle_ws(state.clone(), req.params, ws_sender).await.map(|_| serde_json::Value::Null)
         }
         JsonRpcMethod::WalletWithdraw => {
             handlers::fedimint::wallet::withdraw::handle_ws(state.clone(), req.params).await
