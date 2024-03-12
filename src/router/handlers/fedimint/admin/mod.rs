@@ -12,8 +12,10 @@ use fedimint_client::ClientArc;
 use fedimint_mint_client::MintClientModule;
 use fedimint_wallet_client::WalletClientModule;
 use info::InfoResponse;
+use tracing::debug;
 
 pub async fn get_note_summary(client: &ClientArc) -> anyhow::Result<InfoResponse> {
+    debug!("Fetching wallet summary");
     let mint_client = client.get_first_module::<MintClientModule>();
     let wallet_client = client.get_first_module::<WalletClientModule>();
     let summary = mint_client
@@ -25,6 +27,7 @@ pub async fn get_note_summary(client: &ClientArc) -> anyhow::Result<InfoResponse
                 .to_ref_with_prefix_module_id(1),
         )
         .await;
+
     Ok(InfoResponse {
         network: wallet_client.get_network().to_string(),
         meta: client.get_config().global.meta.clone(),

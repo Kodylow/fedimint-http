@@ -9,6 +9,7 @@ use fedimint_client::ClientArc;
 use fedimint_core::config::FederationId;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tracing::debug;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -21,15 +22,22 @@ pub struct BackupRequest {
 }
 
 async fn _backup(client: ClientArc, req: BackupRequest) -> Result<(), AppError> {
+    debug!("Initiating backup");
     client
         .backup_to_federation(Metadata::from_json_serialized(req.metadata))
         .await
-        .map_err(|e| AppError::new(StatusCode::INTERNAL_SERVER_ERROR, e))
+        .map_err(|e| {
+            debug!("Error during backup: {:?}", e);
+            AppError::new(StatusCode::INTERNAL_SERVER_ERROR, e)
+        })
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
-    let v = serde_json::from_value::<BackupRequest>(v)
-        .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
+    debug!("Handling WebSocket backup request");
+    let v = serde_json::from_value::<BackupRequest>(v).map_err(|e| {
+        debug!("Invalid request received: {}", e);
+        AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e))
+    })?;
     let client = state.get_client(v.federation_id).await?;
     _backup(client, v).await?;
     Ok(json!(()))
@@ -40,6 +48,7 @@ pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<BackupRequest>,
 ) -> Result<Json<()>, AppError> {
+    debug!("Handling REST backup request");
     let client = state.get_client(req.federation_id).await?;
     _backup(client, req).await?;
     Ok(Json(()))

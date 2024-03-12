@@ -7,6 +7,7 @@ use fedimint_core::config::FederationId;
 use multimint::MultiMint;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tracing::debug;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -25,6 +26,8 @@ pub struct JoinResponse {
 }
 
 async fn _join(mut multimint: MultiMint, req: JoinRequest) -> Result<JoinResponse, Error> {
+    debug!("Joining federation with invite code: {:?}", req.invite_code);
+
     let _ = multimint
         .register_new(req.invite_code.clone(), req.set_default)
         .await?;
@@ -35,6 +38,8 @@ async fn _join(mut multimint: MultiMint, req: JoinRequest) -> Result<JoinRespons
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
+    debug!("Handling WebSocket join request");
+
     let v = serde_json::from_value::<JoinRequest>(v)
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
     let join = _join(state.multimint, v).await?;
@@ -47,6 +52,8 @@ pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, AppError> {
+    debug!("Handling REST join request");
+
     let join = _join(state.multimint, req).await?;
     Ok(Json(join))
 }

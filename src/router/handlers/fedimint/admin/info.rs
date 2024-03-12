@@ -10,6 +10,7 @@ use fedimint_wallet_client::WalletClientModule;
 use multimint::MultiMint;
 use serde::Serialize;
 use serde_json::{json, Value};
+use tracing::debug;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -39,7 +40,7 @@ async fn _info(multimint: MultiMint) -> Result<HashMap<FederationId, InfoRespons
                     .to_ref_with_prefix_module_id(1),
             )
             .await;
-
+        debug!("Fetched wallet summary for client: {:?}", id);
         info.insert(
             *id,
             InfoResponse {
@@ -52,10 +53,13 @@ async fn _info(multimint: MultiMint) -> Result<HashMap<FederationId, InfoRespons
         );
     }
 
+    debug!("Fetched info for all clients");
+
     Ok(info)
 }
 
 pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
+    debug!("Handling WebSocket info request");
     let info = _info(state.multimint).await?;
     let info_json = json!(info);
     Ok(info_json)
@@ -65,6 +69,7 @@ pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
 pub async fn handle_rest(
     State(state): State<AppState>,
 ) -> Result<Json<HashMap<FederationId, InfoResponse>>, AppError> {
+    debug!("Handling REST info request");
     let info = _info(state.multimint).await?;
     Ok(Json(info))
 }

@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::format_description::well_known::iso8601;
 use time::OffsetDateTime;
+use tracing::debug;
 
 use crate::error::AppError;
 use crate::state::AppState;
@@ -36,6 +37,7 @@ async fn _list_operations(
     client: ClientArc,
     req: ListOperationsRequest,
 ) -> Result<Value, AppError> {
+    debug!("Listing operations with limit: {}", req.limit);
     const ISO8601_CONFIG: iso8601::EncodedConfig = iso8601::Config::DEFAULT
         .set_formatted_components(iso8601::FormattedComponents::DateTime)
         .encode();
@@ -71,6 +73,7 @@ async fn _list_operations(
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
+    debug!("Handling WebSocket list operations request");
     let v = serde_json::from_value::<ListOperationsRequest>(v).map_err(|e| {
         AppError::new(
             StatusCode::BAD_REQUEST,
@@ -88,6 +91,7 @@ pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<ListOperationsRequest>,
 ) -> Result<Json<Value>, AppError> {
+    debug!("Handling REST list operations request");
     let client = state.get_client(None).await?;
     let operations = _list_operations(client, req).await?;
     Ok(Json(operations))

@@ -9,7 +9,7 @@ use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use tracing::info;
+use tracing::{debug, info};
 
 use crate::error::AppError;
 use crate::router::handlers::fedimint::admin::get_note_summary;
@@ -27,6 +27,7 @@ async fn _await_invoice(
     client: ClientArc,
     req: AwaitInvoiceRequest,
 ) -> Result<InfoResponse, AppError> {
+    debug!("Awaiting invoice for operation: {:?}", req.operation_id);
     let lightning_module = &client.get_first_module::<LightningClientModule>();
     let mut updates = lightning_module
         .subscribe_ln_receive(req.operation_id)
@@ -36,18 +37,20 @@ async fn _await_invoice(
         info!("Update: {update:?}");
         match update {
             LnReceiveState::Claimed => {
+                debug!("Invoice claimed");
                 return Ok(get_note_summary(&client).await?);
             }
             LnReceiveState::Canceled { reason } => {
+                debug!("Invoice canceled: {reason}");
                 return Err(AppError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     anyhow!(reason),
-                ))
+                ));
             }
-            _ => {}
+            _ => {
+                debug!("Waiting for invoice to be claimed");
+            }
         }
-
-        info!("Update: {update:?}");
     }
 
     Err(AppError::new(
@@ -57,6 +60,7 @@ async fn _await_invoice(
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
+    debug!("Handling WebSocket await invoice request");
     let v = serde_json::from_value::<AwaitInvoiceRequest>(v)
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
     let client = state.get_client(v.federation_id).await?;
@@ -70,6 +74,7 @@ pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<AwaitInvoiceRequest>,
 ) -> Result<Json<InfoResponse>, AppError> {
+    debug!("Handling REST await invoice request");
     let client = state.get_client(req.federation_id).await?;
     let invoice = _await_invoice(client, req).await?;
     Ok(Json(invoice))

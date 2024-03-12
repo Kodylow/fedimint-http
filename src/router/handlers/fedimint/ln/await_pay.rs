@@ -8,6 +8,7 @@ use fedimint_core::core::OperationId;
 use fedimint_ln_client::{LightningClientModule, PayType};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tracing::debug;
 
 use super::pay::LnPayResponse;
 use super::wait_for_ln_payment;
@@ -22,15 +23,25 @@ pub struct AwaitLnPayRequest {
 }
 
 async fn _await_pay(client: ClientArc, req: AwaitLnPayRequest) -> Result<LnPayResponse, AppError> {
+    debug!("Awaiting payment for operation: {:?}", req.operation_id);
     let lightning_module = client.get_first_module::<LightningClientModule>();
     let ln_pay_details = lightning_module
         .get_ln_pay_details_for(req.operation_id)
         .await?;
+    debug!(
+        "Payment details for operation: {:?} are: {:?}",
+        req.operation_id, ln_pay_details
+    );
     let payment_type = if ln_pay_details.is_internal_payment {
         PayType::Internal(req.operation_id)
     } else {
         PayType::Lightning(req.operation_id)
     };
+    debug!(
+        "Payment type for operation: {:?} is: {:?}",
+        req.operation_id, payment_type
+    );
+
     wait_for_ln_payment(
         &client,
         payment_type,
@@ -43,6 +54,7 @@ async fn _await_pay(client: ClientArc, req: AwaitLnPayRequest) -> Result<LnPayRe
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
+    debug!("Handling WebSocket await payment request");
     let v = serde_json::from_value::<AwaitLnPayRequest>(v)
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
     let client = state.get_client(v.federation_id).await?;
@@ -56,6 +68,7 @@ pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<AwaitLnPayRequest>,
 ) -> Result<Json<LnPayResponse>, AppError> {
+    debug!("Handling REST await payment request");
     let client = state.get_client(req.federation_id).await?;
     let pay = _await_pay(client, req).await?;
     Ok(Json(pay))
