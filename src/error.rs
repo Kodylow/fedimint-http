@@ -1,9 +1,10 @@
 use std::fmt;
-
+use anyhow::anyhow;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
+#[derive(Debug)]
 pub struct AppError {
     pub error: anyhow::Error,
     pub status: StatusCode,
@@ -15,6 +16,10 @@ impl AppError {
             error: error.into(),
             status,
         }
+    }
+    pub fn from_status_code(status: StatusCode) -> Self {
+        let error_message = format!("HTTP error with status: {}", status.as_u16());
+        AppError::new(status, anyhow!(error_message))
     }
 }
 
