@@ -83,7 +83,7 @@ async fn handle_invoice_request(client: ClientArc, operation_id: OperationId) ->
         .ok_or_else(|| AppError::from_status_code(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-pub async fn handle_rest_invoice(
+pub async fn handle_rest(
     State(state): State<AppState>,
     Json(req): Json<AwaitInvoiceRequest>,
 ) -> Result<Json<AwaitInvoiceResponse>, AppError> {

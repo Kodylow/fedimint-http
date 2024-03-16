@@ -1,11 +1,9 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
 use axum::response::IntoResponse;
-use futures_util::stream::{SplitSink, StreamExt};
-use futures_util::SinkExt;
+use futures_util::stream:: StreamExt;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tracing::info;
+use serde_json:: Value;
 
 use super::handlers;
 use crate::error::AppError;
@@ -72,9 +70,9 @@ pub enum JsonRpcMethod {
 }
 
 async fn handle_socket(mut socket: WebSocket, state: AppState) {
-    let (mut sender, mut receiver) = socket.split();
 
-    while let Some(message) = receiver.next().await {
+
+    while let Some(message) = socket.next().await {
         if let Ok(Message::Text(text)) = message {
             if let Ok(req) = serde_json::from_str::<JsonRpcRequest>(&text) {
                 match req.method {
@@ -90,14 +88,14 @@ async fn handle_socket(mut socket: WebSocket, state: AppState) {
                         // For other methods, use the match_method function to handle them accordingly.
                         let response = match_method(req.clone(), state.clone()).await;
                         let res_msg = create_json_rpc_response(response, req.id);
-                        if let Err(send_error) = sender.send(res_msg).await {
+                        if let Err(send_error) = socket.send(res_msg).await {
                             eprintln!("Failed to send WebSocket message for method");
                         }
                     }
                 }
             } else {
                 // If the request couldn't be parsed, send an invalid request format error.
-                send_err_invalid_req(&mut sender, "Invalid request format", &text).await;
+                send_err_invalid_req(&mut socket, "Invalid request format", &text).await;
             }
         }
     }
@@ -132,26 +130,24 @@ fn create_json_rpc_response(res: Result<Value, AppError>, req_id: u64) -> Messag
     Message::Text(msg_text.unwrap())
 }
 
-async fn send_err_invalid_req(socket: &mut SplitSink<WebSocket, Message>, err_message: &str, text: &str) {
-    // Attempt to extract the id from the request, defaulting to 0 if not available
-    let id = serde_json::from_str::<Value>(text)
+async fn send_err_invalid_req(socket: &mut WebSocket, err_message: &str, text: &str) {
+    let id = serde_json::from_str::<serde_json::Value>(text)
         .ok()
         .and_then(|v| v.get("id").cloned())
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
-    let err_msg = json!({
-        "jsonrpc": JSONRPC_VERSION,
+    let err_msg = serde_json::json!({
+        "jsonrpc": "2.0",
         "error": {
             "code": JSONRPC_ERROR_INVALID_REQUEST,
             "message": err_message,
         },
         "id": id,
-    });
+    }).to_string();
 
-    // Attempt to send the constructed error message
-    if let Err(e) = socket.send(Message::Text(serde_json::to_string(&err_msg).unwrap_or_default())).await {
-        eprintln!("Failed to send error response: {:?}", e);
+    if let Err(send_error) = socket.send(Message::Text(err_msg)).await {
+        eprintln!("Failed to send error response for invalid request format {:?}", send_error);
     }
 }
 
