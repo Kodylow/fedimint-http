@@ -1,9 +1,9 @@
 hidden = ["target", ".cargo"]
 modules = ["rust-1.72:v1-20230911-f253fb1"]
-run = "cargo run"
+run = "direnv allow && nix develop --command cargo run"
 
 [nix]
-channel = "stable-23_05"
+channel = "stable-23_11"
 
 [gitHubImport]
 requiredFiles = [".replit"]
