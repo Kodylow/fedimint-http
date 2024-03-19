@@ -10,14 +10,16 @@ use fedimint_core::config::FederationId;
 use fedimint_ln_client::LightningClientModule;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SwitchGatewayRequest {
     pub gateway_id: String,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
 
@@ -40,6 +42,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(gateway_json)
 }
 
+#[utoipa::path(
+post,
+tag="Switch gateway",
+path="/fedimint/v2/ln/switch-gateway",
+request_body(content = SwitchGatewayRequest, description = "Switch gateway request", content_type = "application/json"),
+responses(
+(status = 200, description = "Switch active gateway.", body = Object),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

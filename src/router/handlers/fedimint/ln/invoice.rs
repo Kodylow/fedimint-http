@@ -9,22 +9,26 @@ use fedimint_core::Amount;
 use fedimint_ln_client::LightningClientModule;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LnInvoiceRequest {
+    #[schema(value_type = u64)]
     pub amount_msat: Amount,
     pub description: String,
     pub expiry_time: Option<u64>,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LnInvoiceResponse {
+    #[schema(value_type = String)]
     pub operation_id: OperationId,
     pub invoice: String,
 }
@@ -51,6 +55,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(invoice_json)
 }
 
+#[utoipa::path(
+post,
+tag="Invoice",
+path="/fedimint/v2/ln/invoice",
+request_body(content = LnInvoiceRequest, description = "Invoice request", content_type = "application/json"),
+responses(
+(status = 200, description = "Create a lightning invoice to receive payment via gateway.", body = LnInvoiceResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

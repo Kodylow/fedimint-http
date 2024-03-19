@@ -9,19 +9,22 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReissueRequest {
+    #[schema(value_type = Object)]
     pub notes: OOBNotes,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReissueResponse {
+    #[schema(value_type = String)]
     pub amount_msat: Amount,
 }
 
@@ -60,6 +63,18 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(reissue_json)
 }
 
+
+#[utoipa::path(
+post,
+tag="Reissue",
+path="/fedimint/v2/mint/reissue",
+request_body(content = ReissueRequest, description = "Reissue request", content_type = "application/json"),
+responses(
+(status = 200, description = "Reissue notes received from a third party to avoid double spends.", body = ReissueResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

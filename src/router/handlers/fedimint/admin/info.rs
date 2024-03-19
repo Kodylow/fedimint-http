@@ -10,17 +10,20 @@ use fedimint_wallet_client::WalletClientModule;
 use multimint::MultiMint;
 use serde::Serialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InfoResponse {
     pub network: String,
     pub meta: BTreeMap<String, String>,
+    #[schema(value_type = u64)]
     pub total_amount_msat: Amount,
     pub total_num_notes: usize,
+    #[schema(value_type = u64)]
     pub denominations_msat: TieredSummary,
 }
 
@@ -61,6 +64,15 @@ pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
     Ok(info_json)
 }
 
+#[utoipa::path(
+get,
+tag="Info",
+path="/fedimint/v2/admin/info",
+responses(
+(status = 200, description = "Display wallet info (holdings, tiers)."),
+(status = 500, description = "Internal Server Error", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

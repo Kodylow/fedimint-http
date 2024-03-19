@@ -9,16 +9,19 @@ use fedimint_client::ClientArc;
 use fedimint_core::config::FederationId;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupRequest {
     pub metadata: BTreeMap<String, String>,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
+
 
 async fn _backup(client: ClientArc, req: BackupRequest) -> Result<(), AppError> {
     client
@@ -35,6 +38,18 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(json!(()))
 }
 
+
+#[utoipa::path(
+post,
+tag="Backup",
+path="/fedimint/v2/admin/backup",
+request_body(content = BackupRequest, description = "Backup request", content_type = "application/json"),
+responses(
+(status = 200, description = "Upload the (encrypted) snapshot of mint notes to federation.", body = ()),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

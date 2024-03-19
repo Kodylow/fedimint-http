@@ -10,16 +10,19 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::info;
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::router::handlers::fedimint::admin::get_note_summary;
 use crate::router::handlers::fedimint::admin::info::InfoResponse;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AwaitInvoiceRequest {
+    #[schema(value_type = String)]
     pub operation_id: OperationId,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
 
@@ -65,6 +68,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(invoice_json)
 }
 
+#[utoipa::path(
+post,
+tag="Await invoice",
+path="/fedimint/v2/ln/await-invoice",
+request_body(content = AwaitInvoiceRequest, description = "Await invoice request", content_type = "application/json"),
+responses(
+(status = 200, description = "Combines two or more serialized e-cash notes strings.", body = InfoResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

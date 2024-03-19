@@ -5,18 +5,21 @@ use fedimint_mint_client::OOBNotes;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CombineRequest {
+    #[schema(value_type = Object)]
     pub notes: Vec<OOBNotes>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CombineResponse {
+    #[schema(value_type = Object)]
     pub notes: OOBNotes,
 }
 
@@ -62,6 +65,17 @@ pub async fn handle_ws(v: Value) -> Result<Value, AppError> {
     Ok(combine_json)
 }
 
+#[utoipa::path(
+post,
+tag="Combine",
+path="/fedimint/v2/mint/combine",
+request_body(content = CombineRequest, description = "Combine request", content_type = "application/json"),
+responses(
+(status = 200, description = "Combines two or more serialized e-cash notes strings.", body = CombineResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     Json(req): Json<CombineRequest>,

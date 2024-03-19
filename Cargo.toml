@@ -42,3 +42,7 @@ futures-util = "0.3.30"
 clap = { version = "4.4.13", features = ["derive", "env"] }
 multimint = "0.1.7"
 axum-otel-metrics = "0.8.0"
+utoipa = { version= "4.2.0", features = ["axum_extras"] }
+utoipa-swagger-ui = { version= "6.0.0", features = ["axum"] }
+axum-openapi = "0.0.0"
+openapi = "0.1.5"

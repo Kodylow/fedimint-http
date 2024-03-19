@@ -3,9 +3,13 @@ use std::fmt;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
+use utoipa::ToSchema;
 
+#[derive(ToSchema)]
 pub struct AppError {
+    #[schema(value_type = Object)]
     pub error: anyhow::Error,
+    #[schema(value_type = String)]
     pub status: StatusCode,
 }
 
@@ -37,8 +41,8 @@ impl fmt::Display for AppError {
 }
 
 impl<E> From<E> for AppError
-where
-    E: Into<anyhow::Error>,
+    where
+        E: Into<anyhow::Error>,
 {
     fn from(err: E) -> Self {
         Self {

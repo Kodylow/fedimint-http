@@ -7,21 +7,24 @@ use fedimint_core::config::FederationId;
 use fedimint_core::core::{ModuleInstanceId, ModuleKind};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub enum ModuleSelector {
     Id(ModuleInstanceId),
+    #[schema(value_type = String)]
     Kind(ModuleKind),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ModuleRequest {
     pub module: ModuleSelector,
     pub args: Vec<String>,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
 
@@ -40,6 +43,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(json!(()))
 }
 
+#[utoipa::path(
+post,
+tag="Module",
+path="/fedimint/v2/admin/module",
+request_body(content = ModuleRequest, description = "Module request", content_type = "application/json"),
+responses(
+(status = 200, description = "Call a module subcommand.", body = Object),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

@@ -10,27 +10,33 @@ use fedimint_ln_client::{LightningClientModule, OutgoingLightningPayment, PayTyp
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::info;
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::router::handlers::fedimint::ln::{get_invoice, wait_for_ln_payment};
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LnPayRequest {
     pub payment_info: String,
+    #[schema(value_type = u64)]
     pub amount_msat: Option<Amount>,
     pub finish_in_background: bool,
     pub lnurl_comment: Option<String>,
+    #[schema(value_type = String)]
     pub federeation_id: Option<FederationId>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LnPayResponse {
+    #[schema(value_type = String)]
     pub operation_id: OperationId,
+    #[schema(value_type = String)]
     pub payment_type: PayType,
     pub contract_id: String,
+    #[schema(value_type = u64)]
     pub fee: Amount,
 }
 
@@ -74,6 +80,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(pay_json)
 }
 
+#[utoipa::path(
+post,
+tag="Pay",
+path="/fedimint/v2/ln/pay",
+request_body(content = LnPayRequest, description = "Pay request", content_type = "application/json"),
+responses(
+(status = 200, description = "Pay a lightning invoice or lnurl via a gateway.", body = LnPayResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

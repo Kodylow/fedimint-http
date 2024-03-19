@@ -22,6 +22,15 @@ pub async fn handle_ws(state: AppState) -> Result<Value, AppError> {
     Ok(config_json)
 }
 
+#[utoipa::path(
+get,
+tag="Config",
+path="/fedimint/v2/admin/config",
+responses(
+(status = 200, description = "Returns the client config."),
+(status = 500, description = "Internal Server Error", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
     let config = _config(state.multimint).await?;

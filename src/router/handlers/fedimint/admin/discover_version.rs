@@ -25,6 +25,15 @@ pub async fn handle_ws(state: AppState) -> Result<Value, AppError> {
     Ok(version_json)
 }
 
+#[utoipa::path(
+get,
+tag="Discover version",
+path="/fedimint/v2/admin/discover-version",
+responses(
+(status = 200, description = "Discover the common api version to use to communicate with the federation.", body = Object),
+(status = 500, description = "Internal Server Error", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
     let version = _discover_version(state.multimint).await?;
