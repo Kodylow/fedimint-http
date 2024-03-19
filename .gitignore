@@ -3,3 +3,4 @@
 fm_client_db
 .cargo
 /fm_db_dir
+.vscode

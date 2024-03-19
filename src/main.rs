@@ -6,6 +6,7 @@ use axum::http::Method;
 use fedimint_core::api::InviteCode;
 use router::ws::websocket_handler;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
 use tracing::info;
 
 mod config;
@@ -57,7 +58,7 @@ struct Cli {
     domain: String,
 
     /// Port
-    #[clap(long, env = "PORT", default_value_t = 3001)]
+    #[clap(long, env = "PORT", default_value_t = 3333)]
     port: u16,
 
     /// Mode of operation
@@ -107,19 +108,22 @@ async fn main() -> Result<()> {
         // allow `GET` and `POST` when accessing the resource
         .allow_methods([Method::GET, Method::POST])
         // allow requests from any origin
-        .allow_origin(Any);
+        .allow_origin(Any)
+        // allow auth header
+        .allow_headers(Any);
 
     let metrics = HttpMetricsLayerBuilder::new()
         .with_service_name("fedimint-http".to_string())
         .build();
 
-    // add routes for the readme and status
     let app = app
-        .route("/", get(handle_readme))
-        .route("/health", get(handle_status))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http()) // tracing requests
+        // no traces for routes bellow
+        .route("/health", get(|| async { "Server is up and running!" })) // for health check
+        // metrics for all routes above
         .merge(metrics.routes())
-        .layer(metrics)
-        .layer(cors);
+        .layer(metrics);
 
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", &cli.domain, &cli.port))
         .await

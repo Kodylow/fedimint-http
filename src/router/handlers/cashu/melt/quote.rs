@@ -1,11 +1,12 @@
+use std::u64;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use multimint::client;
 use serde::Deserialize;
 use serde::Serialize;
 use anyhow::anyhow;
-
+use std::string::String;
 use crate::error::AppError;
 use crate::state::AppState;
 
@@ -21,7 +22,7 @@ struct PostMeltQuoteRequest {
 struct PostMeltQuoteResponse {
     quote: String,
     amount: u64,
-    fee_reverse: u64,
+    fee_reserve: u64,
     paid: bool,
     expiry: u64,
 }
@@ -46,7 +47,15 @@ pub async fn handle_rest(
                 anyhow!("No default client found "),)),
     };
 
-    let response= PostMeltQuoteResponse{}
 
-    Ok(())
+    let response= PostMeltQuoteResponse{
+        quote: "me".to_string(),
+        amount: 10,
+        fee_reserve: 2,
+        paid: true,
+        expiry: 1701704757,
+
+    };
+
+    Ok(Json(response))
 }
