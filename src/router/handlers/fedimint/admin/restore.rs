@@ -22,6 +22,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(json!(()))
 }
 
+#[utoipa::path(
+post,
+tag="Restore",
+path="/fedimint/v2/admin/restore",
+request_body(content = Object, description = "Restore request", content_type = "application/json"),
+responses(
+(status = 200, description = "Restore the previously created backup of mint notes (with backup command).", body = Object),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

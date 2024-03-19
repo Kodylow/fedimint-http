@@ -5,18 +5,21 @@ use fedimint_core::{Amount, TieredMulti};
 use fedimint_mint_client::OOBNotes;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SplitRequest {
+    #[schema(value_type = Object)]
     pub notes: OOBNotes,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SplitResponse {
+    #[schema(value_type = Object)]
     pub notes: BTreeMap<Amount, OOBNotes>,
 }
 
@@ -51,6 +54,17 @@ pub async fn handle_ws(v: Value) -> Result<Value, AppError> {
     Ok(split_json)
 }
 
+#[utoipa::path(
+post,
+tag="Split",
+path="/fedimint/v2/mint/split",
+request_body(content = SplitRequest, description = "Split request", content_type = "application/json"),
+responses(
+(status = 200, description = "Splits a string containing multiple e-cash notes (e.g. from the `spend` command) into ones that contain exactly one.", body = SplitResponse),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(Json(req): Json<SplitRequest>) -> Result<Json<SplitResponse>, AppError> {
     let split = _split(req).await?;

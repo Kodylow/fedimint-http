@@ -10,14 +10,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::format_description::well_known::iso8601;
 use time::OffsetDateTime;
+use utoipa::ToSchema;
 
 use crate::error::AppError;
 use crate::state::AppState;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListOperationsRequest {
     pub limit: usize,
+    #[schema(value_type = String)]
     pub federation_id: Option<FederationId>,
 }
 
@@ -83,6 +85,17 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     Ok(operations_json)
 }
 
+#[utoipa::path(
+post,
+tag="List operations",
+path="/fedimint/v2/admin/list-operations",
+request_body(content = ListOperationsRequest, description = "List operations request", content_type = "application/json"),
+responses(
+(status = 200, description = "List operations.", body = Object),
+(status = 500, description = "Internal Server Error", body = AppError),
+(status = 422, description = "Unprocessable Entity", body = AppError)
+)
+)]
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,

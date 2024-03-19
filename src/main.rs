@@ -16,13 +16,16 @@ mod state;
 mod utils;
 
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Router};
+use utoipa_swagger_ui::SwaggerUi;
 use axum_otel_metrics::HttpMetricsLayerBuilder;
 use clap::{Parser, Subcommand, ValueEnum};
 use router::handlers::*;
 use state::AppState;
 // use tower_http::cors::{Any, CorsLayer};
 use tower_http::validate_request::ValidateRequestHeaderLayer;
+use utoipa::OpenApi;
+use crate::router::openapi::swagger::ApiDoc;
 
 #[derive(Clone, Debug, ValueEnum)]
 enum Mode {
@@ -144,6 +147,7 @@ pub async fn create_default_router(state: AppState, password: &str) -> Result<Ro
         .route("/fedimint/v2/ws", get(websocket_handler))
         .nest("/fedimint/v2", fedimint_v2_rest())
         .nest("/cashu/v1", cashu_v1_rest())
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docsss/openapi.json", ApiDoc::openapi()))
         .with_state(state)
         // .layer(cors)
         .layer(ValidateRequestHeaderLayer::bearer(password));
