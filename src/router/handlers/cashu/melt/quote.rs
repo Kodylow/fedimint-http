@@ -10,16 +10,17 @@ use std::string::String;
 use crate::error::AppError;
 use crate::state::AppState;
 
+#[derive(Debug, Deserialize)]
 enum MeltQuoteUnit {
     Sat,
 }
 #[derive(Debug, Deserialize)]
-struct PostMeltQuoteRequest {
+pub struct PostMeltQuoteRequest {
     request: String,
     unit: MeltQuoteUnit,
 }
 #[derive(Debug, Serialize)]
-struct PostMeltQuoteResponse {
+pub struct PostMeltQuoteResponse {
     quote: String,
     amount: u64,
     fee_reserve: u64,
@@ -35,7 +36,7 @@ pub async fn handle_method(State(_state): State<AppState>) -> Result<(), AppErro
 }
 
 #[axum_macros::debug_handler]
-pub async fn handle_rest(
+pub async fn handle_method_quote_id(
     State(state): State<AppState>,
     Json(req): Json<PostMeltQuoteRequest>,
 ) -> Result<Json<PostMeltQuoteResponse>, AppError> {
@@ -47,10 +48,11 @@ pub async fn handle_rest(
                 anyhow!("No default client found "),)),
     };
 
+    let amount=client.as_ref().unwrap().get_balance().await;
 
     let response= PostMeltQuoteResponse{
         quote: "me".to_string(),
-        amount: 10,
+        amount: amount.msats,
         fee_reserve: 2,
         paid: true,
         expiry: 1701704757,

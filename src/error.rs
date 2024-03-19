@@ -4,6 +4,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
+#[derive(Debug)]
 pub struct AppError {
     pub error: anyhow::Error,
     pub status: StatusCode,
@@ -35,6 +36,8 @@ impl fmt::Display for AppError {
         write!(f, "{}", error_json)
     }
 }
+
+
 
 impl<E> From<E> for AppError
 where
